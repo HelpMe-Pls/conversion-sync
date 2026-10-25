@@ -1,7 +1,7 @@
 import { fetchWonDeal, verifySignatureV3, wonDealIds, type WebhookEvent } from "./hubspot";
-import { sendEvents } from "./meta";
+import { sendEvents, type PurchaseEvent } from "./meta";
 import { d1Log } from "./store";
-import { syncWonDeal } from "./sync";
+import { syncWonDeal, type Deps } from "./sync";
 
 export interface Env {
   DB: D1Database;
@@ -13,10 +13,11 @@ export interface Env {
   META_TEST_EVENT_CODE?: string;
   WON_STAGES: string;
   DEFAULT_CURRENCY: string;
+  DEFAULT_PHONE_COUNTRY_CODE?: string;
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== "POST" || url.pathname !== "/webhooks/hubspot") {
       return new Response("Not found", { status: 404 });
@@ -41,21 +42,24 @@ export default {
       return new Response("Bad JSON", { status: 400 });
     }
 
-    const deps = {
+    const deps: Deps = {
       log: d1Log(env.DB),
-      fetchDeal: (id: string) => fetchWonDeal(id, env.HUBSPOT_TOKEN, env.DEFAULT_CURRENCY),
-      sendToMeta: (e: Parameters<typeof sendEvents>[0]) =>
+      now: () => new Date(),
+      fetchDeal: (id) => fetchWonDeal(id, env.HUBSPOT_TOKEN, env.DEFAULT_CURRENCY),
+      sendToMeta: (e: PurchaseEvent[]) =>
         sendEvents(e, {
           pixelId: env.META_PIXEL_ID,
           accessToken: env.META_ACCESS_TOKEN,
           apiVersion: env.META_API_VERSION,
           testEventCode: env.META_TEST_EVENT_CODE,
         }),
+      defaultPhoneCountryCode: env.DEFAULT_PHONE_COUNTRY_CODE,
     };
     const wonStages = env.WON_STAGES.split(",").map((s) => s.trim());
 
-    // Answer HubSpot fast; the sync runs after the response.
-    ctx.waitUntil(Promise.all(wonDealIds(events, wonStages).map((id) => syncWonDeal(id, deps))));
-    return new Response(null, { status: 204 });
+    // Sync before answering: a 5xx makes HubSpot redeliver, and the sync log makes the
+    // redelivery skip deals that already went out.
+    const results = await Promise.all(wonDealIds(events, wonStages).map((id) => syncWonDeal(id, deps)));
+    return new Response(null, { status: results.includes("failed") ? 503 : 204 });
   },
 };

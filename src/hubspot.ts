@@ -13,12 +13,13 @@ export interface SignatureInput {
 }
 
 // HubSpot signature v3: base64(HMAC-SHA256(clientSecret, method + uri + body + timestamp)),
-// and requests older than 5 minutes are rejected to stop replays.
+// with a fixed set of percent-escapes in the URI decoded first. Timestamps more than 5 minutes
+// away from now are rejected to stop replays.
 export async function verifySignatureV3(input: SignatureInput): Promise<boolean> {
   const { secret, method, uri, body, timestamp, signature, now } = input;
   if (!timestamp || !signature) return false;
   const ts = Number(timestamp);
-  if (!Number.isFinite(ts) || now - ts > MAX_AGE_MS) return false;
+  if (!Number.isFinite(ts) || Math.abs(now - ts) > MAX_AGE_MS) return false;
 
   const key = await crypto.subtle.importKey(
     "raw",
@@ -33,8 +34,9 @@ export async function verifySignatureV3(input: SignatureInput): Promise<boolean>
   } catch {
     return false;
   }
+  const signedUri = uri.replace(/%3A|%2F|%3F|%40|%21|%24|%27|%28|%29|%2A|%2C|%3B/gi, (m) => decodeURIComponent(m));
   // crypto.subtle.verify compares in constant time.
-  return crypto.subtle.verify("HMAC", key, given, new TextEncoder().encode(`${method}${uri}${body}${timestamp}`));
+  return crypto.subtle.verify("HMAC", key, given, new TextEncoder().encode(`${method}${signedUri}${body}${timestamp}`));
 }
 
 export interface WebhookEvent {
@@ -63,7 +65,7 @@ export function wonDealIds(events: WebhookEvent[], wonStages: string[]): string[
 export interface WonDeal {
   dealId: string;
   closedAt: Date;
-  amount: number;
+  amount: number | null;
   currency: string;
   email: string | null;
   phone: string | null;
@@ -99,9 +101,15 @@ export async function fetchWonDeal(dealId: string, token: string, fallbackCurren
   return {
     dealId,
     closedAt: deal.properties.closedate ? new Date(deal.properties.closedate) : new Date(),
-    amount: Number(deal.properties.amount ?? 0) || 0,
+    amount: parseAmount(deal.properties.amount),
     currency: deal.properties.deal_currency_code || fallbackCurrency,
     email,
     phone,
   };
+}
+
+function parseAmount(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }

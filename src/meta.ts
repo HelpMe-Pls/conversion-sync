@@ -5,8 +5,14 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, "");
+// Meta wants digits only, with the country code and no leading zeros.
+export function normalizePhone(phone: string, defaultCountryCode?: string): string {
+  const raw = phone.trim().replace(/\s*(ext\.?|x)\s*\d+$/i, "");
+  const digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+")) return digits;
+  if (digits.startsWith("00")) return digits.slice(2);
+  const national = digits.replace(/^0+/, "");
+  return defaultCountryCode ? `${defaultCountryCode}${national}` : national;
 }
 
 export async function sha256Hex(value: string): Promise<string> {
@@ -27,10 +33,14 @@ export function eventIdFor(dealId: string): string {
   return `hubspot-deal-${dealId}`;
 }
 
-// event_id lets Meta drop duplicates if the same deal is ever sent twice.
-export async function buildPurchaseEvent(deal: Omit<WonDeal, "email"> & { email: string }): Promise<PurchaseEvent> {
+// The D1 sync log is what stops a repeat send: Meta only matches a server event's event_id
+// against a browser Pixel event, never against another server event.
+export async function buildPurchaseEvent(
+  deal: Omit<WonDeal, "email" | "amount"> & { email: string; amount: number },
+  defaultCountryCode?: string,
+): Promise<PurchaseEvent> {
   const user_data: PurchaseEvent["user_data"] = { em: [await sha256Hex(normalizeEmail(deal.email))] };
-  const phone = deal.phone ? normalizePhone(deal.phone) : "";
+  const phone = deal.phone ? normalizePhone(deal.phone, defaultCountryCode) : "";
   if (phone) user_data.ph = [await sha256Hex(phone)];
 
   return {

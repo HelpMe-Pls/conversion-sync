@@ -47,7 +47,7 @@ function deps(overrides: Partial<Deps> = {}): TestDeps {
       amount: 900,
       currency: "USD",
       email: "buyer@example.com",
-      phone: null,
+      phone: null, gclid: null,
     }),
     destinations: [metaDestination({ pixelId: "px", accessToken: "t", apiVersion: "v21.0" })],
     ...overrides,
@@ -83,14 +83,14 @@ describe("syncWonDeal with Meta as the only destination", () => {
 
   it("skips a deal with no contact email and logs why", async () => {
     const sent = stubMeta();
-    const d = deps({ fetchDeal: async (dealId) => ({ dealId, closedAt: NOW, amount: 1, currency: "USD", email: null, phone: null }) });
+    const d = deps({ fetchDeal: async (dealId) => ({ dealId, closedAt: NOW, amount: 1, currency: "USD", email: null, phone: null, gclid: null }) });
     expect(await syncWonDeal("12", d)).toEqual({ meta: "skipped_no_email" });
     expect(sent).toHaveLength(0);
   });
 
   it("skips a deal with no amount instead of sending a $0 sale", async () => {
     const sent = stubMeta();
-    const d = deps({ fetchDeal: async (dealId) => ({ dealId, closedAt: NOW, amount: null, currency: "USD", email: "a@b.co", phone: null }) });
+    const d = deps({ fetchDeal: async (dealId) => ({ dealId, closedAt: NOW, amount: null, currency: "USD", email: "a@b.co", phone: null, gclid: null }) });
     expect(await syncWonDeal("16", d)).toEqual({ meta: "skipped_no_amount" });
     expect(sent).toHaveLength(0);
   });
@@ -107,7 +107,7 @@ describe("syncWonDeal with Meta as the only destination", () => {
   it("does not send a sale that closed more than 7 days ago, since Meta rejects it", async () => {
     const sent = stubMeta();
     const d = deps({
-      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-10-17T12:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null }),
+      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-10-17T12:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null, gclid: null }),
     });
     expect(await syncWonDeal("14", d)).toEqual({ meta: "skipped_too_old" });
     expect(sent).toHaveLength(0);
@@ -116,7 +116,7 @@ describe("syncWonDeal with Meta as the only destination", () => {
   it("dates a sale with a future close date at the time it is sent", async () => {
     const sent = stubMeta();
     const d = deps({
-      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-11-30T00:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null }),
+      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-11-30T00:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null, gclid: null }),
     });
     await syncWonDeal("15", d);
     expect((sent[0] as { event_time: number }).event_time).toBe(1792929600);
@@ -161,7 +161,7 @@ describe("syncWonDeal with two destinations", () => {
     const google = fakeDestination("google", 90 * DAY_MS);
     const d = deps({
       destinations: [meta, google],
-      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-09-25T12:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null }),
+      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-09-25T12:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null, gclid: null }),
     });
     expect(await syncWonDeal("22", d)).toEqual({ meta: "skipped_too_old", google: "sent" });
   });

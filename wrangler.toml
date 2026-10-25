@@ -11,6 +11,12 @@ DEFAULT_CURRENCY = "USD"
 DEFAULT_PHONE_COUNTRY_CODE = ""
 # Check Meta's current Graph API version before deploying.
 META_API_VERSION = "v21.0"
+# Google Ads (optional). Google runs only when GOOGLE_ADS_ACCOUNT_ID, GOOGLE_CONVERSION_ACTION_ID and
+# the GOOGLE_SERVICE_ACCOUNT_KEY secret are all set. See README, "Add Google Ads".
+# GOOGLE_ADS_ACCOUNT_ID = "123-456-7890"        # the account that owns the conversion action
+# GOOGLE_CONVERSION_ACTION_ID = ""              # an "Import from clicks" conversion action
+# GOOGLE_LOGIN_ACCOUNT_ID = ""                  # only when the service account sits on a manager account
+# GOOGLE_GCLID_PROPERTY = "hs_google_click_id"  # the HubSpot contact property that holds the gclid
 
 [[d1_databases]]
 binding = "DB"
@@ -21,3 +27,5 @@ migrations_dir = "migrations"
 # Secrets (wrangler secret put <NAME>):
 # HUBSPOT_CLIENT_SECRET, HUBSPOT_TOKEN, META_PIXEL_ID, META_ACCESS_TOKEN
 # Optional: META_TEST_EVENT_CODE. Meta keeps test events and uses them for ads; see README.
+# Optional: GOOGLE_SERVICE_ACCOUNT_KEY, the service account's whole JSON key file
+# (wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY < service-account-key.json).

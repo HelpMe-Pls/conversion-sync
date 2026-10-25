@@ -69,13 +69,21 @@ export interface WonDeal {
   currency: string;
   email: string | null;
   phone: string | null;
+  // The contact's Google click id, when HubSpot saved one.
+  gclid: string | null;
 }
 
 const API = "https://api.hubapi.com";
 
 // Reads the deal and its first associated contact with a private-app token
-// (scopes: crm.objects.deals.read, crm.objects.contacts.read).
-export async function fetchWonDeal(dealId: string, token: string, fallbackCurrency: string): Promise<WonDeal> {
+// (scopes: crm.objects.deals.read, crm.objects.contacts.read). `gclidProperty` is the contact
+// property that holds the Google click id.
+export async function fetchWonDeal(
+  dealId: string,
+  token: string,
+  fallbackCurrency: string,
+  gclidProperty = "hs_google_click_id",
+): Promise<WonDeal> {
   const headers = { Authorization: `Bearer ${token}` };
   const dealRes = await fetch(
     `${API}/crm/v3/objects/deals/${dealId}?properties=amount,closedate,deal_currency_code&associations=contacts`,
@@ -89,13 +97,16 @@ export async function fetchWonDeal(dealId: string, token: string, fallbackCurren
 
   let email: string | null = null;
   let phone: string | null = null;
+  let gclid: string | null = null;
   const contactId = deal.associations?.contacts?.results?.[0]?.id;
   if (contactId) {
-    const contactRes = await fetch(`${API}/crm/v3/objects/contacts/${contactId}?properties=email,phone`, { headers });
+    const props = ["email", "phone", gclidProperty].map(encodeURIComponent).join(",");
+    const contactRes = await fetch(`${API}/crm/v3/objects/contacts/${contactId}?properties=${props}`, { headers });
     if (!contactRes.ok) throw new Error(`HubSpot contact ${contactId}: ${contactRes.status}`);
-    const contact = (await contactRes.json()) as { properties: { email?: string | null; phone?: string | null } };
+    const contact = (await contactRes.json()) as { properties: Record<string, string | null | undefined> };
     email = contact.properties.email || null;
     phone = contact.properties.phone || null;
+    gclid = contact.properties[gclidProperty] || null;
   }
 
   return {
@@ -105,6 +116,7 @@ export async function fetchWonDeal(dealId: string, token: string, fallbackCurren
     currency: deal.properties.deal_currency_code || fallbackCurrency,
     email,
     phone,
+    gclid,
   };
 }
 

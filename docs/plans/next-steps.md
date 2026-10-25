@@ -13,7 +13,10 @@ bun run typecheck   # tsc --noEmit, no output
 Before declaring done, run `bun run test && bun run typecheck`.
 
 ## ⚡ Agent-ready queue
-**Nothing queued.**
+- [ ] review #2 · src/index.ts:58 — 204 before the sync (waitUntil): a failed Meta/HubSpot call is never retried, the sale is lost.
+- [ ] review #2 · src/meta.ts:38 — event_time = closedate: a deal closed >7 days ago or in the future is rejected by Meta on every try.
+- [ ] review #2 · src/sync.ts:16 — has() then send() races: two concurrent deliveries both send the same sale.
+- [ ] review #2 · README.md:15-16,55 — claims HubSpot retries failed syncs, Meta dedups server events, and test events are harmless; all false.
 
 ## 🧑 Human-in-the-loop
 - Deploy needs Khoi's Cloudflare account and secrets: `wrangler d1 create`, `wrangler secret put` (HUBSPOT_CLIENT_SECRET, HUBSPOT_TOKEN, META_PIXEL_ID, META_ACCESS_TOKEN). No agent does this.

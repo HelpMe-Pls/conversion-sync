@@ -1,0 +1,20 @@
+name = "conversion-sync"
+main = "src/index.ts"
+compatibility_date = "2024-10-22"
+
+[vars]
+# HubSpot's internal stage IDs that count as a sale (comma-separated).
+WON_STAGES = "closedwon"
+DEFAULT_CURRENCY = "USD"
+# Check Meta's current Graph API version before deploying.
+META_API_VERSION = "v21.0"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "conversion-sync"
+database_id = "<run: wrangler d1 create conversion-sync>"
+migrations_dir = "migrations"
+
+# Secrets (wrangler secret put <NAME>):
+# HUBSPOT_CLIENT_SECRET, HUBSPOT_TOKEN, META_PIXEL_ID, META_ACCESS_TOKEN
+# Optional: META_TEST_EVENT_CODE (routes events to Events Manager → Test events)

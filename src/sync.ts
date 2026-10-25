@@ -1,5 +1,5 @@
 // One won deal → each enabled destination gets it at most once, tracked per destination.
-import { conversionIdFor, type Destination } from "./destination";
+import { conversionIdFor, RejectedError, type Destination } from "./destination";
 import type { WonDeal } from "./hubspot";
 import type { SyncLog, SyncStatus } from "./store";
 
@@ -54,7 +54,7 @@ export async function syncWonDeal(dealId: string, deps: Deps): Promise<DealSyncR
         const detail = await dest.send({ ...deal, closedAt, email: deal.email, amount: deal.amount });
         await finish(dest, "sent", detail || undefined);
       } catch (err) {
-        await finish(dest, "failed", reason(err));
+        await finish(dest, err instanceof RejectedError ? "rejected" : "failed", reason(err));
       }
     }),
   );

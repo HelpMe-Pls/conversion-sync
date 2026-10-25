@@ -1,6 +1,6 @@
 // The sync log in D1: one row per (event_id, destination), so each destination gets a deal at most once.
 
-export const SYNC_STATUSES = ["sending", "sent", "failed", "skipped_no_email", "skipped_no_amount", "skipped_too_old"] as const;
+export const SYNC_STATUSES = ["sending", "sent", "failed", "skipped_no_email", "skipped_no_amount", "skipped_too_old", "rejected"] as const;
 export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 // A row stuck in 'sending' this long (a crashed attempt) may be claimed again.

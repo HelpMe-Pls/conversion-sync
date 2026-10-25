@@ -10,9 +10,13 @@ export interface Destination {
   name: string;
   // Sales that closed longer ago than this are logged as skipped_too_old for this destination.
   maxAgeMs: number;
-  // Sends one won deal; throws on failure. May return a detail for the sync log, such as a request id.
+  // Sends one won deal; throws on failure (RejectedError when retrying cannot help). May return a detail for the sync log, such as a request id.
   send(deal: SendableDeal): Promise<string | void>;
 }
+
+// Thrown by a destination when the platform refused the sale for good (e.g. a click outside its
+// window): logged as rejected and never retried, so HubSpot is not asked to redeliver forever.
+export class RejectedError extends Error {}
 
 // The conversion id every destination gets for a deal (ADR 0002): Meta's event_id, Google's transactionId.
 export function conversionIdFor(dealId: string): string {

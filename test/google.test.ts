@@ -148,6 +148,14 @@ describe("googleDestination", () => {
     expect(event.userData.userIdentifiers).toContainEqual({ phoneNumber: PHONE_E164 });
   });
 
+  it("leaves out a phone saved without a country code when no default is set", async () => {
+    const calls = stubGoogle();
+    await googleDestination(config()).send({ ...deal, phone: "0912 345 678" });
+
+    const [event] = JSON.parse(String(calls.find((c) => c.url.endsWith("events:ingest"))?.init.body)).events;
+    expect(event.userData).toEqual({ userIdentifiers: [{ emailAddress: JANE }] });
+  });
+
   it("returns Google's requestId for the sync log", async () => {
     stubGoogle();
     expect(await googleDestination(config()).send(deal)).toBe("req-123");
@@ -173,6 +181,18 @@ describe("Google's 90-day limit", () => {
       fetchDeal: async () => ({ ...deal, closedAt: new Date(NOW.getTime() - days * DAY_MS) }),
       destinations: [googleDestination(config())],
     });
+
+  it("logs a sale Google refuses for good as rejected, so HubSpot stops redelivering it", async () => {
+    stubGoogle(() => new Response('{"error":{"status":"INVALID_ARGUMENT","details":"EVENT_TIME_INVALID"}}', { status: 400 }));
+    expect(await syncClosedDaysAgo(10)).toEqual({ google: "rejected" });
+  });
+
+  it("keeps a rate-limited or server-side Google failure retryable", async () => {
+    stubGoogle(() => new Response("slow down", { status: 429 }));
+    expect(await syncClosedDaysAgo(10)).toEqual({ google: "failed" });
+    stubGoogle(() => new Response("oops", { status: 500 }));
+    expect(await syncClosedDaysAgo(10)).toEqual({ google: "failed" });
+  });
 
   it("sends a sale closed 89 days ago and skips one closed 91 days ago", async () => {
     stubGoogle();

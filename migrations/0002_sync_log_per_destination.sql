@@ -4,7 +4,7 @@ CREATE TABLE sync_log_new (
   event_id    TEXT NOT NULL,
   destination TEXT NOT NULL,
   deal_id     TEXT NOT NULL,
-  status      TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'failed', 'skipped_no_email', 'skipped_no_amount', 'skipped_too_old')),
+  status      TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'failed', 'skipped_no_email', 'skipped_no_amount', 'skipped_too_old', 'rejected')),
   detail      TEXT,
   updated_at  TEXT NOT NULL,
   PRIMARY KEY (event_id, destination)

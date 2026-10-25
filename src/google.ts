@@ -1,6 +1,6 @@
 // Google side: send a won deal to Google Ads as an offline click conversion through the
 // Data Manager API (docs/research-google-ads-offline.md).
-import { conversionIdFor, type Destination, type SendableDeal } from "./destination";
+import { conversionIdFor, RejectedError, type Destination, type SendableDeal } from "./destination";
 import { serviceAccountAccessToken } from "./google-auth";
 import { normalizeEmail, normalizePhone, sha256Hex } from "./meta";
 
@@ -54,8 +54,10 @@ async function buildIngestRequest(deal: SendableDeal, cfg: GoogleConfig): Promis
   const userIdentifiers: IngestRequest["events"][number]["userData"]["userIdentifiers"] = [
     { emailAddress: await sha256Hex(normalizeEmail(deal.email)) },
   ];
-  // E.164: the digits with their country code, after a "+".
-  const phone = deal.phone ? normalizePhone(deal.phone, cfg.defaultPhoneCountryCode) : "";
+  // E.164: the digits with their country code, after a "+". A number saved without a country code,
+  // with no default configured, cannot be written in E.164, so it is left out.
+  const hasCountryCode = deal.phone ? /^\s*(\+|00)/.test(deal.phone) || !!cfg.defaultPhoneCountryCode : false;
+  const phone = deal.phone && hasCountryCode ? normalizePhone(deal.phone, cfg.defaultPhoneCountryCode) : "";
   if (phone) userIdentifiers.push({ phoneNumber: await sha256Hex(`+${phone}`) });
 
   const event: IngestRequest["events"][number] = {
@@ -85,7 +87,13 @@ export function googleDestination(cfg: GoogleConfig): Destination {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`Google Data Manager ${res.status}: ${await res.text()}`);
+      if (!res.ok) {
+        const message = `Google Data Manager ${res.status}: ${await res.text()}`;
+        // A 4xx about the request itself (bad field, click too old) fails the same way on every retry.
+        // Auth (401/403), timeouts (408) and rate limits (429) can clear up, so they stay retryable.
+        if (res.status >= 400 && res.status < 500 && ![401, 403, 408, 429].includes(res.status)) throw new RejectedError(message);
+        throw new Error(message);
+      }
       // Matching runs later at Google; this id looks up the outcome (requestStatus:retrieve).
       const { requestId } = (await res.json()) as { requestId?: string };
       return requestId;

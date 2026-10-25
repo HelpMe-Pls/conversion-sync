@@ -77,10 +77,12 @@ The gclid is read from the HubSpot contact property `hs_google_click_id` ("Googl
 
 ## Resend failed sales
 
-HubSpot stops redelivering a webhook after about a day. To resend deals that stayed `failed` after that, for example after fixing a setting, clear their rows and move the deals out of and back into the won stage:
+HubSpot stops redelivering a webhook after about a day. A deal that stayed `failed`, for example until you fixed a setting, is sent again the next time it enters a won stage: move it out of the won stage and back. Destinations that already have the sale skip it.
+
+To list them:
 
 ```sh
-npx wrangler d1 execute conversion-sync --remote --command "DELETE FROM sync_log WHERE status = 'failed'"
+npx wrangler d1 execute conversion-sync --remote --command "SELECT deal_id, destination, detail FROM sync_log WHERE status = 'failed'"
 ```
 
 ## Want this on your account?

@@ -16,7 +16,7 @@ conversion-sync closes that gap. It is a small Cloudflare Worker. When a deal in
 - **Sends each sale once.** Every deal gets a fixed conversion id (`hubspot-deal-<deal id>`, see ADR 0002): Meta's `event_id` and Google's `transactionId`. Before sending, the Worker claims the deal in a small D1 table in one atomic step, so two deliveries of the same deal cannot both send. Meta does not remove repeat server events for you, so this table is the guard.
 - **Tracks each ad platform on its own.** Each ad platform is a destination: Meta always, Google Ads when its settings are present. The D1 table keeps one row per deal and destination. When a sale reaches one platform and fails for another, only the failed one is tried again.
 - **Retries failures.** The Worker syncs before it answers HubSpot. If HubSpot or any destination fails, it answers `503`, and HubSpot delivers the webhook again later. A destination that already has the deal is skipped on the redelivery. A deal another attempt is still sending also gets `503`, and an attempt that died mid-send is taken over after 5 minutes.
-- **Skips what a platform would reject, and says why.** Each deal is logged per destination as `sent`, `failed` (with the reason), `skipped_no_email`, `skipped_no_amount`, `skipped_too_old` or `rejected`. A sale Google refuses for good, such as one whose ad click is older than the conversion action's window, is logged as `rejected` and not retried. Each destination sets its own age limit. Meta skips a deal that closed more than 7 days ago, because Meta refuses older events. Google skips a deal that closed more than 90 days ago, because a Google Ads conversion action counts a sale at most 90 days after the click. So a sale 8 to 90 days old still goes to Google. A close date in the future is sent as today.
+- **Skips what a platform would reject, and says why.** Each deal is logged per destination as `sent`, `failed` (with the reason), `skipped_no_email`, `skipped_no_amount`, `skipped_too_old` or `rejected`. A sale whose ad click is older than the Google conversion action's window is refused by Google for good; it is logged as `rejected` and not retried. Any other Google error, such as a wrong account or conversion action id, stays `failed` and is retried. Each destination sets its own age limit. Meta skips a deal that closed more than 7 days ago, because Meta refuses older events. Google skips a deal that closed more than 90 days ago, because a Google Ads conversion action counts a sale at most 90 days after the click. So a sale 8 to 90 days old still goes to Google. A close date in the future is sent as today.
 
 ## What it does not do yet
 
@@ -74,6 +74,14 @@ Google Ads stays off until `GOOGLE_ADS_ACCOUNT_ID`, `GOOGLE_CONVERSION_ACTION_ID
 5. **Set the settings** in `wrangler.toml` under `[vars]`: `GOOGLE_ADS_ACCOUNT_ID` (the Google Ads account id; the hyphens are fine) and `GOOGLE_CONVERSION_ACTION_ID` (the conversion action's id). Then `bun run deploy`.
 
 The gclid is read from the HubSpot contact property `hs_google_click_id` ("Google ad click ID"). That internal name comes from community posts, not HubSpot's documentation. Check it in your portal with `GET /crm/v3/properties/contacts/hs_google_click_id`, and set `GOOGLE_GCLID_PROPERTY` if yours differs.
+
+## Resend failed sales
+
+HubSpot stops redelivering a webhook after about a day. To resend deals that stayed `failed` after that, for example after fixing a setting, clear their rows and move the deals out of and back into the won stage:
+
+```sh
+npx wrangler d1 execute conversion-sync --remote --command "DELETE FROM sync_log WHERE status = 'failed'"
+```
 
 ## Want this on your account?
 

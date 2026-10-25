@@ -88,10 +88,12 @@ export function googleDestination(cfg: GoogleConfig): Destination {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const message = `Google Data Manager ${res.status}: ${await res.text()}`;
-        // A 4xx about the request itself (bad field, click too old) fails the same way on every retry.
-        // Auth (401/403), timeouts (408) and rate limits (429) can clear up, so they stay retryable.
-        if (res.status >= 400 && res.status < 500 && ![401, 403, 408, 429].includes(res.status)) throw new RejectedError(message);
+        const text = await res.text();
+        const message = `Google Data Manager ${res.status}: ${text}`;
+        // Only a click older than the conversion action's window is known to fail the same way on
+        // every retry. Any other error, including a wrong account or conversion action id, stays
+        // retryable, so sales go through once the operator fixes the setting.
+        if (text.includes("EVENT_TIME_INVALID")) throw new RejectedError(message);
         throw new Error(message);
       }
       // Matching runs later at Google; this id looks up the outcome (requestStatus:retrieve).

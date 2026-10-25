@@ -187,6 +187,13 @@ describe("Google's 90-day limit", () => {
     expect(await syncClosedDaysAgo(10)).toEqual({ google: "rejected" });
   });
 
+  it("keeps a setup mistake retryable, so sales come through once the setting is fixed", async () => {
+    stubGoogle(() => new Response('{"error":{"status":"INVALID_ARGUMENT","message":"productDestinationId not found"}}', { status: 400 }));
+    expect(await syncClosedDaysAgo(10)).toEqual({ google: "failed" });
+    stubGoogle(() => new Response('{"error":{"status":"NOT_FOUND"}}', { status: 404 }));
+    expect(await syncClosedDaysAgo(10)).toEqual({ google: "failed" });
+  });
+
   it("keeps a rate-limited or server-side Google failure retryable", async () => {
     stubGoogle(() => new Response("slow down", { status: 429 }));
     expect(await syncClosedDaysAgo(10)).toEqual({ google: "failed" });

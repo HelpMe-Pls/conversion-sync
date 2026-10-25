@@ -122,3 +122,47 @@ describe("syncWonDeal with Meta as the only destination", () => {
     expect((sent[0] as { event_time: number }).event_time).toBe(1792929600);
   });
 });
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// A destination that records what it received, and fails while `failing` is true.
+function fakeDestination(name: string, maxAgeMs = 7 * DAY_MS) {
+  const received: string[] = [];
+  const dest = {
+    name,
+    maxAgeMs,
+    failing: false,
+    received,
+    async send(deal: { dealId: string }) {
+      if (dest.failing) throw new Error(`${name} 500`);
+      received.push(deal.dealId);
+    },
+  };
+  return dest;
+}
+
+describe("syncWonDeal with two destinations", () => {
+  it("retries a deal only for the destination that failed", async () => {
+    const meta = fakeDestination("meta");
+    const google = fakeDestination("google");
+    const d = deps({ destinations: [meta, google] });
+
+    google.failing = true;
+    expect(await syncWonDeal("21", d)).toEqual({ meta: "sent", google: "failed" });
+
+    google.failing = false;
+    expect(await syncWonDeal("21", d)).toEqual({ meta: "duplicate", google: "sent" });
+    expect(meta.received).toEqual(["21"]);
+    expect(google.received).toEqual(["21"]);
+  });
+
+  it("applies each destination's own age limit to the same sale", async () => {
+    const meta = fakeDestination("meta", 7 * DAY_MS);
+    const google = fakeDestination("google", 90 * DAY_MS);
+    const d = deps({
+      destinations: [meta, google],
+      fetchDeal: async (dealId) => ({ dealId, closedAt: new Date("2026-09-25T12:00:00Z"), amount: 5, currency: "USD", email: "a@b.co", phone: null }),
+    });
+    expect(await syncWonDeal("22", d)).toEqual({ meta: "skipped_too_old", google: "sent" });
+  });
+});

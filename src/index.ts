@@ -1,5 +1,7 @@
 import { fetchWonDeal, verifySignatureV3, wonDealIds, type WebhookEvent } from "./hubspot";
-import { sendEvents, type PurchaseEvent } from "./meta";
+import type { Destination } from "./destination";
+import { googleDestination } from "./google";
+import { metaDestination } from "./meta";
 import { d1Log } from "./store";
 import { syncWonDeal, type Deps } from "./sync";
 
@@ -14,6 +16,37 @@ export interface Env {
   WON_STAGES: string;
   DEFAULT_CURRENCY: string;
   DEFAULT_PHONE_COUNTRY_CODE?: string;
+  // Google Ads runs only when the account id, conversion action id and service-account key are all set.
+  GOOGLE_ADS_ACCOUNT_ID?: string;
+  GOOGLE_CONVERSION_ACTION_ID?: string;
+  GOOGLE_SERVICE_ACCOUNT_KEY?: string;
+  GOOGLE_LOGIN_ACCOUNT_ID?: string;
+  // The HubSpot contact property that holds the gclid; default hs_google_click_id.
+  GOOGLE_GCLID_PROPERTY?: string;
+}
+
+function destinations(env: Env): Destination[] {
+  const list = [
+    metaDestination({
+      pixelId: env.META_PIXEL_ID,
+      accessToken: env.META_ACCESS_TOKEN,
+      apiVersion: env.META_API_VERSION,
+      testEventCode: env.META_TEST_EVENT_CODE,
+      defaultPhoneCountryCode: env.DEFAULT_PHONE_COUNTRY_CODE,
+    }),
+  ];
+  if (env.GOOGLE_ADS_ACCOUNT_ID && env.GOOGLE_CONVERSION_ACTION_ID && env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    list.push(
+      googleDestination({
+        accountId: env.GOOGLE_ADS_ACCOUNT_ID,
+        loginAccountId: env.GOOGLE_LOGIN_ACCOUNT_ID,
+        conversionActionId: env.GOOGLE_CONVERSION_ACTION_ID,
+        serviceAccountKey: env.GOOGLE_SERVICE_ACCOUNT_KEY,
+        defaultPhoneCountryCode: env.DEFAULT_PHONE_COUNTRY_CODE,
+      }),
+    );
+  }
+  return list;
 }
 
 export default {
@@ -45,23 +78,16 @@ export default {
     const deps: Deps = {
       log: d1Log(env.DB),
       now: () => new Date(),
-      fetchDeal: (id) => fetchWonDeal(id, env.HUBSPOT_TOKEN, env.DEFAULT_CURRENCY),
-      sendToMeta: (e: PurchaseEvent[]) =>
-        sendEvents(e, {
-          pixelId: env.META_PIXEL_ID,
-          accessToken: env.META_ACCESS_TOKEN,
-          apiVersion: env.META_API_VERSION,
-          testEventCode: env.META_TEST_EVENT_CODE,
-        }),
-      defaultPhoneCountryCode: env.DEFAULT_PHONE_COUNTRY_CODE,
+      fetchDeal: (id) => fetchWonDeal(id, env.HUBSPOT_TOKEN, env.DEFAULT_CURRENCY, env.GOOGLE_GCLID_PROPERTY || undefined),
+      destinations: destinations(env),
     };
     const wonStages = env.WON_STAGES.split(",").map((s) => s.trim());
 
     // Sync before answering: a 5xx makes HubSpot redeliver, and the sync log makes the
-    // redelivery skip deals that already went out. A deal another attempt is still sending
-    // is not done yet, so it also gets a 5xx.
+    // redelivery skip each destination a deal already reached. A deal another attempt is still
+    // sending to any destination is not done yet, so it also gets a 5xx.
     const results = await Promise.all(wonDealIds(events, wonStages).map((id) => syncWonDeal(id, deps)));
-    const retry = results.some((r) => r === "failed" || r === "in_flight");
+    const retry = results.some((r) => Object.values(r).some((s) => s === "failed" || s === "in_flight"));
     return new Response(null, { status: retry ? 503 : 204 });
   },
 };

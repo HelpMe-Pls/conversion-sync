@@ -93,3 +93,102 @@ describe("POST /webhooks/hubspot", () => {
     expect(res.status).toBe(401);
   });
 });
+
+// A D1 stand-in that keeps one sync_log status per (deal, destination) and applies the claim rule:
+// a new row or a failed one may be claimed; a sent one may not.
+function statefulD1(): D1Database {
+  const rows = new Map<string, string>();
+  return {
+    prepare: (sql: string) => {
+      let args: unknown[] = [];
+      const stmt = {
+        bind: (...a: unknown[]) => ((args = a), stmt),
+        first: async () => {
+          const key = `${args[0]}/${args[1]}`;
+          if (sql.trim().startsWith("SELECT")) return rows.has(key) ? { status: rows.get(key) } : null;
+          const status = rows.get(key);
+          if (status !== undefined && status !== "failed") return null;
+          rows.set(key, "sending");
+          return { event_id: args[0] };
+        },
+        run: async () => {
+          rows.set(`${args[0]}/${args[1]}`, String(args[3]));
+          return { success: true };
+        },
+      };
+      return stmt;
+    },
+  } as unknown as D1Database;
+}
+
+// A throwaway service-account key file, made fresh for each run.
+async function testOnlyServiceAccountKey(): Promise<string> {
+  const pair = (await crypto.subtle.generateKey(
+    { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const der = new Uint8Array((await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer);
+  const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----\n`;
+  return JSON.stringify({ client_email: "test@example-project.iam.gserviceaccount.com", private_key: pem });
+}
+
+// HubSpot, Meta and Google faked at the fetch boundary. Returns the hosts each delivery reached.
+function stubAllApis(googleStatus: () => number): string[] {
+  const hosts: string[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    hosts.push(url.host);
+    if (url.pathname.includes("/objects/deals/")) {
+      return Response.json({
+        properties: { amount: "100", closedate: new Date().toISOString() },
+        associations: { contacts: { results: [{ id: "c1" }] } },
+      });
+    }
+    if (url.pathname.includes("/objects/contacts/")) return Response.json({ properties: { email: "a@b.co" } });
+    if (url.host === "graph.facebook.com") return Response.json({ events_received: 1 });
+    if (url.host === "oauth2.googleapis.com") return Response.json({ access_token: "ya29.test" });
+    if (url.host === "datamanager.googleapis.com") return Response.json({ requestId: "r1" }, { status: googleStatus() });
+    return new Response("unexpected", { status: 404 });
+  });
+  return hosts;
+}
+
+describe("POST /webhooks/hubspot with Google Ads set up", () => {
+  async function googleEnv(): Promise<Env> {
+    return {
+      ...env,
+      DB: statefulD1(),
+      GOOGLE_ADS_ACCOUNT_ID: "123-456-7890",
+      GOOGLE_CONVERSION_ACTION_ID: "987654321",
+      GOOGLE_SERVICE_ACCOUNT_KEY: await testOnlyServiceAccountKey(),
+    };
+  }
+
+  it("answers 503 when Meta takes the sale and Google fails, and the redelivery sends to Google only", async () => {
+    let googleStatus = 500;
+    const hosts = stubAllApis(() => googleStatus);
+    const e = await googleEnv();
+
+    const first = await worker.fetch(await signedRequest(won), e, ctx);
+    expect(first.status).toBe(503);
+    expect(hosts).toContain("graph.facebook.com");
+
+    hosts.length = 0;
+    googleStatus = 200;
+    const retry = await worker.fetch(await signedRequest(won), e, ctx);
+    expect(retry.status).toBe(204);
+    expect(hosts).toContain("datamanager.googleapis.com");
+    expect(hosts).not.toContain("graph.facebook.com");
+  });
+
+  it("leaves Google out while any of its three settings is missing", async () => {
+    const hosts = stubAllApis(() => 200);
+    const { GOOGLE_SERVICE_ACCOUNT_KEY: _missing, ...e } = await googleEnv();
+
+    const res = await worker.fetch(await signedRequest(won), e, ctx);
+    expect(res.status).toBe(204);
+    expect(hosts).not.toContain("datamanager.googleapis.com");
+  });
+});
+

@@ -76,7 +76,12 @@ describe("fetchWonDeal", () => {
     vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/objects/deals/")) return Response.json(deal);
-      if (url.includes("/objects/contacts/") && contact) return Response.json(contact);
+      if (url.includes("/objects/contacts/") && contact) {
+        // Like HubSpot, return only the properties the request asked for.
+        const asked = new URL(url).searchParams.get("properties")?.split(",") ?? [];
+        const props = (contact as { properties: Record<string, string> }).properties;
+        return Response.json({ properties: Object.fromEntries(Object.entries(props).filter(([k]) => asked.includes(k))) });
+      }
       return new Response("not found", { status: 404 });
     });
   }
@@ -96,7 +101,15 @@ describe("fetchWonDeal", () => {
       currency: "EUR",
       email: "jane@example.com",
       phone: "+1 555 010 9999",
+      gclid: null,
     });
+  });
+
+  it("reads the gclid from the contact property named by the setting, hs_google_click_id by default", async () => {
+    const deal = { properties: { amount: "10", closedate: "2026-10-25T12:00:00Z" }, associations: { contacts: { results: [{ id: "c1" }] } } };
+    stub(deal, { properties: { email: "a@b.co", hs_google_click_id: "Cj0KCQ-default", my_gclid: "Cj0KCQ-custom" } });
+    expect((await fetchWonDeal("14", "token", "USD")).gclid).toBe("Cj0KCQ-default");
+    expect((await fetchWonDeal("14", "token", "USD", "my_gclid")).gclid).toBe("Cj0KCQ-custom");
   });
 
   it("reports a missing amount as null, never as 0", async () => {

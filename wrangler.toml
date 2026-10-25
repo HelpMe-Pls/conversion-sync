@@ -1,0 +1,23 @@
+name = "conversion-sync"
+main = "src/index.ts"
+compatibility_date = "2024-10-22"
+
+[vars]
+# HubSpot's internal stage IDs that count as a sale (comma-separated). The default pipeline
+# uses "closedwon"; a custom pipeline's stages are numeric IDs (Settings → Objects → Deals → Pipelines).
+WON_STAGES = "closedwon"
+DEFAULT_CURRENCY = "USD"
+# Country code added to phone numbers saved without one, e.g. "1" for the US. Empty = add none.
+DEFAULT_PHONE_COUNTRY_CODE = ""
+# Check Meta's current Graph API version before deploying.
+META_API_VERSION = "v21.0"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "conversion-sync"
+database_id = "<run: wrangler d1 create conversion-sync>"
+migrations_dir = "migrations"
+
+# Secrets (wrangler secret put <NAME>):
+# HUBSPOT_CLIENT_SECRET, HUBSPOT_TOKEN, META_PIXEL_ID, META_ACCESS_TOKEN
+# Optional: META_TEST_EVENT_CODE. Meta keeps test events and uses them for ads; see README.

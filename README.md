@@ -13,7 +13,7 @@ conversion-sync closes that gap. It is a small Cloudflare Worker. When a deal in
 - **Finds the buyer.** It reads the deal's amount, close date and currency (`DEFAULT_CURRENCY` when the deal has none), and the email and phone of the first contact HubSpot lists on the deal.
 - **Protects personal data.** Email and phone are normalized and SHA-256 hashed before they leave, as Meta requires. A phone saved without a country code gets `DEFAULT_PHONE_COUNTRY_CODE`. Raw identifiers are never sent or stored.
 - **Sends each sale once.** Every deal gets a fixed `event_id` (`hubspot-deal-<deal id>`). Before sending, the Worker claims the deal in a small D1 table in one atomic step, so two deliveries of the same deal cannot both send. Meta does not remove repeat server events for you, so this table is the guard.
-- **Retries failures.** The Worker syncs before it answers HubSpot. If HubSpot or Meta fails, it answers `503`, and HubSpot delivers the webhook again later. Deals already sent are skipped on the redelivery.
+- **Retries failures.** The Worker syncs before it answers HubSpot. If HubSpot or Meta fails, it answers `503`, and HubSpot delivers the webhook again later. Deals already sent are skipped on the redelivery. A deal another attempt is still sending also gets `503`, and an attempt that died mid-send is taken over after 5 minutes.
 - **Skips what Meta would reject, and says why.** Each deal is logged as `sent`, `failed` (with the reason), `skipped_no_email`, `skipped_no_amount` or `skipped_too_old`. A deal that closed more than 7 days ago is skipped, because Meta refuses older events. A close date in the future is sent as today.
 
 ## What it does not do yet

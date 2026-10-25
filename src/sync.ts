@@ -14,13 +14,15 @@ export interface Deps {
   defaultPhoneCountryCode?: string;
 }
 
-export type SyncResult = Exclude<SyncStatus, "sending"> | "duplicate";
+export type SyncResult = Exclude<SyncStatus, "sending"> | "duplicate" | "in_flight";
 
 export async function syncWonDeal(dealId: string, deps: Deps): Promise<SyncResult> {
   const eventId = eventIdFor(dealId);
-  if (!(await deps.log.claim(eventId, dealId))) return "duplicate";
+  const claim = await deps.log.claim(eventId, dealId);
+  if (claim === "in_flight") return "in_flight";
+  if (claim === "done") return "duplicate";
 
-  const finish = async (status: Exclude<SyncResult, "duplicate">, detail?: string) => {
+  const finish = async (status: Exclude<SyncResult, "duplicate" | "in_flight">, detail?: string) => {
     await deps.log.record(eventId, dealId, status, detail);
     return status;
   };

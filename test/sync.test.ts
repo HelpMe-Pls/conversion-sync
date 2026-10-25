@@ -11,9 +11,10 @@ function memoryLog(): SyncLog & { rows: Map<string, SyncStatus> } {
     rows,
     async claim(eventId) {
       const s = rows.get(eventId);
-      if (s === "sent" || s === "sending" || s === "skipped_too_old") return false;
+      if (s === "sending") return "in_flight";
+      if (s === "sent" || s === "skipped_too_old") return "done";
       rows.set(eventId, "sending");
-      return true;
+      return "claimed";
     },
     async record(eventId, _dealId, status) {
       rows.set(eventId, status);
@@ -55,7 +56,14 @@ describe("syncWonDeal", () => {
   it("sends a deal only once, even when two deliveries overlap", async () => {
     const d = deps();
     const results = await Promise.all([syncWonDeal("11", d), syncWonDeal("11", d)]);
-    expect(results.sort()).toEqual(["duplicate", "sent"]);
+    expect(results.sort()).toEqual(["in_flight", "sent"]);
+    expect(d.sent).toHaveLength(1);
+  });
+
+  it("reports a deal that already went out as a duplicate", async () => {
+    const d = deps();
+    await syncWonDeal("11", d);
+    expect(await syncWonDeal("11", d)).toBe("duplicate");
     expect(d.sent).toHaveLength(1);
   });
 

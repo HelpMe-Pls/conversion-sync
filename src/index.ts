@@ -58,8 +58,10 @@ export default {
     const wonStages = env.WON_STAGES.split(",").map((s) => s.trim());
 
     // Sync before answering: a 5xx makes HubSpot redeliver, and the sync log makes the
-    // redelivery skip deals that already went out.
+    // redelivery skip deals that already went out. A deal another attempt is still sending
+    // is not done yet, so it also gets a 5xx.
     const results = await Promise.all(wonDealIds(events, wonStages).map((id) => syncWonDeal(id, deps)));
-    return new Response(null, { status: results.includes("failed") ? 503 : 204 });
+    const retry = results.some((r) => r === "failed" || r === "in_flight");
+    return new Response(null, { status: retry ? 503 : 204 });
   },
 };

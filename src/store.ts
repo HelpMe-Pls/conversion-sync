@@ -6,9 +6,13 @@ export type SyncStatus = (typeof SYNC_STATUSES)[number];
 // A row stuck in 'sending' this long (a crashed attempt) may be claimed again.
 const STALE_SENDING_MS = 5 * 60 * 1000;
 
+// claimed = this caller may send; in_flight = another attempt is sending it now;
+// done = it was sent, or skipped for a reason a retry cannot fix.
+export type Claim = "claimed" | "in_flight" | "done";
+
 export interface SyncLog {
-  // Atomically takes the right to send: true only for a new deal or a retryable row.
-  claim(eventId: string, dealId: string): Promise<boolean>;
+  // Atomically takes the right to send: "claimed" only for a new deal or a retryable row.
+  claim(eventId: string, dealId: string): Promise<Claim>;
   record(eventId: string, dealId: string, status: SyncStatus, detail?: string): Promise<void>;
 }
 
@@ -27,7 +31,9 @@ export function d1Log(db: D1Database, now: () => Date = () => new Date()): SyncL
         )
         .bind(eventId, dealId, at.toISOString(), staleBefore)
         .first();
-      return row !== null;
+      if (row !== null) return "claimed";
+      const current = await db.prepare("SELECT status FROM sync_log WHERE event_id = ?").bind(eventId).first<{ status: SyncStatus }>();
+      return current?.status === "sending" ? "in_flight" : "done";
     },
     async record(eventId, dealId, status, detail) {
       await db

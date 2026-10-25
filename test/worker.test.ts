@@ -18,14 +18,19 @@ async function signedRequest(body: string): Promise<Request> {
   });
 }
 
-// A D1 stand-in that answers the claim query with a row and accepts every write.
-function fakeD1(): D1Database {
-  const stmt = {
-    bind: () => stmt,
-    first: async () => ({ event_id: "claimed" }),
-    run: async () => ({ success: true }),
-  };
-  return { prepare: () => stmt } as unknown as D1Database;
+// A D1 stand-in. `existing` is the deal's current sync_log status, or null for a new deal:
+// the claim upsert returns a row only for a new deal, and the status read returns `existing`.
+function fakeD1(existing: string | null = null): D1Database {
+  return {
+    prepare: (sql: string) => {
+      const stmt = {
+        bind: () => stmt,
+        first: async () => (sql.trim().startsWith("INSERT") ? (existing ? null : { event_id: "e" }) : { status: existing }),
+        run: async () => ({ success: true }),
+      };
+      return stmt;
+    },
+  } as unknown as D1Database;
 }
 
 const env: Env = {
@@ -69,6 +74,18 @@ describe("POST /webhooks/hubspot", () => {
     stubApis(500);
     const res = await worker.fetch(await signedRequest(won), env, ctx);
     expect(res.status).toBe(503);
+  });
+
+  it("answers 503 while another delivery of the deal is still sending, so HubSpot retries", async () => {
+    stubApis(200);
+    const res = await worker.fetch(await signedRequest(won), { ...env, DB: fakeD1("sending") }, ctx);
+    expect(res.status).toBe(503);
+  });
+
+  it("answers 204 for a deal that already went out", async () => {
+    stubApis(200);
+    const res = await worker.fetch(await signedRequest(won), { ...env, DB: fakeD1("sent") }, ctx);
+    expect(res.status).toBe(204);
   });
 
   it("rejects an unsigned request with 401", async () => {

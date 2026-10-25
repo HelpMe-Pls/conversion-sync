@@ -43,6 +43,7 @@ describe("buildPurchaseEvent", () => {
       currency: "USD",
       email: " Jane@Example.com",
       phone: "+1 555 010 9999",
+      gclid: null,
     });
 
     expect(event).toEqual({
@@ -63,6 +64,7 @@ describe("buildPurchaseEvent", () => {
       currency: "USD",
       email: "a@b.co",
       phone: null,
+      gclid: null,
     });
     expect(event.user_data).toEqual({ em: [AB] });
   });

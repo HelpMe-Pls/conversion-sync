@@ -1,5 +1,5 @@
 // Meta side: normalize + hash identifiers, build the Purchase event, send it.
-import type { WonDeal } from "./hubspot";
+import { conversionIdFor, type Destination, type SendableDeal } from "./destination";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -29,14 +29,10 @@ export interface PurchaseEvent {
   custom_data: { value: number; currency: string };
 }
 
-export function eventIdFor(dealId: string): string {
-  return `hubspot-deal-${dealId}`;
-}
-
 // The D1 sync log is what stops a repeat send: Meta only matches a server event's event_id
 // against a browser Pixel event, never against another server event.
 export async function buildPurchaseEvent(
-  deal: Omit<WonDeal, "email" | "amount"> & { email: string; amount: number },
+  deal: SendableDeal,
   defaultCountryCode?: string,
 ): Promise<PurchaseEvent> {
   const user_data: PurchaseEvent["user_data"] = { em: [await sha256Hex(normalizeEmail(deal.email))] };
@@ -46,7 +42,7 @@ export async function buildPurchaseEvent(
   return {
     event_name: "Purchase",
     event_time: Math.floor(deal.closedAt.getTime() / 1000),
-    event_id: eventIdFor(deal.dealId),
+    event_id: conversionIdFor(deal.dealId),
     action_source: "system_generated",
     user_data,
     custom_data: { value: deal.amount, currency: deal.currency },
@@ -58,6 +54,21 @@ export interface MetaConfig {
   accessToken: string;
   apiVersion: string;
   testEventCode?: string;
+  // Country code added to a phone saved without one, e.g. "1" for the US.
+  defaultPhoneCountryCode?: string;
+}
+
+// Meta rejects server events dated more than 7 days back; keep an hour of margin.
+const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000 - 60 * 60 * 1000;
+
+export function metaDestination(cfg: MetaConfig): Destination {
+  return {
+    name: "meta",
+    maxAgeMs: MAX_EVENT_AGE_MS,
+    async send(deal) {
+      await sendEvents([await buildPurchaseEvent(deal, cfg.defaultPhoneCountryCode)], cfg);
+    },
+  };
 }
 
 export async function sendEvents(events: PurchaseEvent[], cfg: MetaConfig): Promise<void> {

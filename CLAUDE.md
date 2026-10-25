@@ -1,6 +1,6 @@
 # conversion-sync
 
-A Cloudflare Worker that sends HubSpot won deals to Meta's Conversions API as Purchase events. TypeScript, D1, Vitest, Bun.
+A Cloudflare Worker that sends HubSpot won deals to ad platforms as conversions: Meta's Conversions API and Google Ads (Data Manager API). TypeScript, D1, Vitest, Bun.
 
 ## Agent skills
 

@@ -1,5 +1,7 @@
 # conversion-sync
 
+[![CI](https://github.com/HelpMe-Pls/conversion-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/HelpMe-Pls/conversion-sync/actions/workflows/ci.yml)
+
 **When a deal closes in HubSpot, Meta and Google Ads hear about the sale.**
 
 Your ads optimize for the people who click. Your money comes from the people who buy, and that happens later, in your CRM, after a call or an invoice. The ad platforms never see it. So they keep finding more clickers.

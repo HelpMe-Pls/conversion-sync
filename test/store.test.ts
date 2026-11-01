@@ -48,6 +48,7 @@ describe("d1Log on real SQLite", () => {
       await log.claim(id, status, "meta");
       await log.record(id, status, "meta", status);
       expect(await log.claim(id, status, "meta")).toBe("done");
+      expect(await d1Log(db, at(5 * MIN + 1)).claim(id, status, "meta")).toBe("done"); // not taken over as a stale send
     }
   });
 

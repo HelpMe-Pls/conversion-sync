@@ -42,7 +42,7 @@ conversion-sync Worker ── claim in D1 (once per deal and platform)
 ## How it is built
 
 - TypeScript on Cloudflare Workers, with D1 for the sync log.
-- Written test-first with Vitest. The tests cover the signature check, the won-stage filter, the HubSpot read, the hashing rules, the Meta event and the Google request, the Google sign-in (the token's header and payload checked against values encoded with `openssl`, the signature verified with a key made for each run), the send-once rule per destination and the Worker's answers to HubSpot. The D1 claim and record queries run against real SQLite after the real migrations, including the takeover of a stuck send after 5 minutes and the move of v0 rows to Meta. GitHub Actions runs the tests and the type check on every push and pull request.
+- Written test-first with Vitest. The tests cover the signature check, the won-stage filter, the HubSpot read, the hashing rules, the Meta event and the Google request, the Google sign-in (the token's header and payload checked against values encoded with `openssl`, the signature verified with a key made for each run), the send-once rule per destination and the Worker's answers to HubSpot. The D1 claim and record queries run against real SQLite after the real migrations, including the takeover of a stuck send after 5 minutes and the move of v0 rows to Meta. GitHub Actions runs the tests and the type check on every pull request and every push to main and dev.
 - No AI model sits in the path. A sale is plain data, so the sync stays cheap and predictable.
 
 ```

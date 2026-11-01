@@ -1,10 +1,23 @@
 # conversion-sync
 
+[![CI](https://github.com/HelpMe-Pls/conversion-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/HelpMe-Pls/conversion-sync/actions/workflows/ci.yml)
+
 **When a deal closes in HubSpot, Meta and Google Ads hear about the sale.**
 
 Your ads optimize for the people who click. Your money comes from the people who buy, and that happens later, in your CRM, after a call or an invoice. The ad platforms never see it. So they keep finding more clickers.
 
 conversion-sync closes that gap. It is a small Cloudflare Worker. When a deal in HubSpot moves to a won stage, it sends Meta a `Purchase` event with the deal's value, through the Conversions API. When Google Ads is set up, it also sends Google Ads an offline conversion with the same value, through Google's Data Manager API. Both platforms can then learn from real sales.
+
+## How a sale flows
+
+```
+HubSpot deal → won stage
+      │  webhook (signed)
+      ▼
+conversion-sync Worker ── claim in D1 (once per deal and platform)
+      ├──► Meta Conversions API   Purchase event, hashed email + phone
+      └──► Google Ads (optional)  offline conversion, gclid + hashed email + phone
+```
 
 ## What it does today
 
@@ -29,7 +42,7 @@ conversion-sync closes that gap. It is a small Cloudflare Worker. When a deal in
 ## How it is built
 
 - TypeScript on Cloudflare Workers, with D1 for the sync log.
-- Written test-first with Vitest. The tests cover the signature check, the won-stage filter, the HubSpot read, the hashing rules, the Meta event and the Google request, the Google sign-in (the token's header and payload checked against values encoded with `openssl`, the signature verified with a key made for each run), the send-once rule per destination and the Worker's answers to HubSpot. The D1 claim query and the migrations were checked by hand against real SQLite; no automated test runs that SQL yet.
+- Written test-first with Vitest. The tests cover the signature check, the won-stage filter, the HubSpot read, the hashing rules, the Meta event and the Google request, the Google sign-in (the token's header and payload checked against values encoded with `openssl`, the signature verified with a key made for each run), the send-once rule per destination and the Worker's answers to HubSpot. The D1 claim and record queries run against real SQLite after the real migrations, including the takeover of a stuck send after 5 minutes and the move of v0 rows to Meta. GitHub Actions runs the tests and the type check on every pull request and every push to main and dev.
 - No AI model sits in the path. A sale is plain data, so the sync stays cheap and predictable.
 
 ```

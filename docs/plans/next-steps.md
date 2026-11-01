@@ -22,6 +22,7 @@ Before declaring done, run `bun run test && bun run typecheck`.
 
 ## Reference — consult when a task needs it
 - **Lessons** — one line per trap, newest first:
+  - Vite 5 cannot resolve node:sqlite; tests load it with process.getBuiltinModule, and CI pins Node 24 (PR #10).
   - Only Data Manager's EVENT_TIME_INVALID is permanent ('rejected'); every other Google error stays retryable, so a setup mistake never drops sales (PR #8).
   - HubSpot gives a webhook ~5s: the Worker syncs before answering, so keep each delivery small (PR #2).
   - Free private repo: GitHub offers no branch protection; `main` is protected by convention only (ADR 0001).
